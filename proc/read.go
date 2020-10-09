@@ -537,6 +537,7 @@ func (p proc) GetThreads() ([]Thread, error) {
 		states, _ := iter.GetStates()
 
 		threads = append(threads, Thread{
+
 			ThreadID:   ThreadID(id),
 			ThreadName: static.Name,
 			Counts:     counts,

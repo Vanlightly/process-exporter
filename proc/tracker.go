@@ -29,8 +29,10 @@ type (
 		// trackChildren makes Tracker track descendants of procs the
 		// namer wanted tracked.
 		trackChildren bool
-		// trackThreads makes Tracker track per-thread metrics.
+		// trackThreads makes Tracker track per-thread (name only) metrics.
 		trackThreads bool
+		// trackThreadIds makes Tracker track per-thread name and id metrics.
+		trackThreadIds bool
 		// never ignore processes, i.e. always re-check untracked processes in case comm has changed
 		alwaysRecheck bool
 		username      map[int]string
@@ -42,6 +44,7 @@ type (
 	Delta Counts
 
 	trackedThread struct {
+		tid        int
 		name       string
 		accum      Counts
 		latest     Delta
@@ -68,6 +71,8 @@ type (
 	ThreadUpdate struct {
 		// ThreadName is the name of the thread based on field of stat.
 		ThreadName string
+		// Tid is the id of the thread based on /proc/<pid>/task/<tid>.
+		Tid        int
 		// Latest is how much the counts increased since last cycle.
 		Latest Delta
 	}
@@ -131,7 +136,7 @@ func (tp *trackedProc) getUpdate() Update {
 	}
 	if len(tp.threads) > 1 {
 		for _, tt := range tp.threads {
-			u.Threads = append(u.Threads, ThreadUpdate{tt.name, tt.latest})
+			u.Threads = append(u.Threads, ThreadUpdate{ tt.name, tt.tid, tt.latest})
 			if tt.wchan != "" {
 				u.Wchans[tt.wchan]++
 			}
@@ -141,13 +146,14 @@ func (tp *trackedProc) getUpdate() Update {
 }
 
 // NewTracker creates a Tracker.
-func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool) *Tracker {
+func NewTracker(namer common.MatchNamer, trackChildren, trackThreads, trackThreadIds, alwaysRecheck, debug bool) *Tracker {
 	return &Tracker{
 		namer:         namer,
 		tracked:       make(map[ID]*trackedProc),
 		procIds:       make(map[int]ID),
 		trackChildren: trackChildren,
 		trackThreads:  trackThreads,
+		trackThreadIds: trackThreadIds,
 		alwaysRecheck: alwaysRecheck,
 		username:      make(map[int]string),
 		debug:         debug,
@@ -164,7 +170,7 @@ func (t *Tracker) track(groupName string, idinfo IDInfo) {
 		tproc.threads = make(map[ThreadID]trackedThread)
 		for _, thr := range idinfo.Threads {
 			tproc.threads[thr.ThreadID] = trackedThread{
-				thr.ThreadName, thr.Counts, Delta{}, time.Time{}, thr.Wchan}
+				thr.ThreadID.Pid, thr.ThreadName, thr.Counts, Delta{}, time.Time{}, thr.Wchan}
 		}
 	}
 
@@ -195,7 +201,7 @@ func (tp *trackedProc) update(metrics Metrics, now time.Time, cerrs *CollectErro
 			tp.threads = make(map[ThreadID]trackedThread)
 		}
 		for _, thr := range threads {
-			tt := trackedThread{thr.ThreadName, thr.Counts, Delta{}, now, thr.Wchan}
+			tt := trackedThread{thr.ThreadID.Pid, thr.ThreadName, thr.Counts, Delta{}, now, thr.Wchan}
 			if old, ok := tp.threads[thr.ThreadID]; ok {
 				tt.latest, tt.accum = thr.Counts.Sub(old.accum), thr.Counts
 			}

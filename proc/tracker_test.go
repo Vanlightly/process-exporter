@@ -36,7 +36,7 @@ func TestTrackerBasic(t *testing.T) {
 		},
 	}
 	// Note that n3 should not be tracked according to our namer.
-	tr := NewTracker(newNamer(n1, n2, n4), false, false, false, false)
+	tr := NewTracker(newNamer(n1, n2, n4), false, false, false, false, false)
 
 	opts := cmpopts.SortSlices(lessUpdateGroupName)
 	for i, tc := range tests {
@@ -78,7 +78,7 @@ func TestTrackerChildren(t *testing.T) {
 		},
 	}
 	// Only n2 and children of n2s should be tracked
-	tr := NewTracker(newNamer(n2), true, false, false, false)
+	tr := NewTracker(newNamer(n2), true, false, false, false, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.procs...))
@@ -111,7 +111,7 @@ func TestTrackerMetrics(t *testing.T) {
 				Filedesc{2, 20}, tm, 1, States{Running: 1}, msi{}, nil},
 		},
 	}
-	tr := NewTracker(newNamer(n), false, false, false, false)
+	tr := NewTracker(newNamer(n), false, false, false,false, false)
 
 	for i, tc := range tests {
 		_, got, err := tr.Update(procInfoIter(tc.proc))
@@ -139,8 +139,8 @@ func TestTrackerThreads(t *testing.T) {
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{}, msi{},
 				[]ThreadUpdate{
-					{"t1", Delta{}},
-					{"t2", Delta{}},
+					{"t1", 0, Delta{}},
+					{"t2", 0, Delta{}},
 				},
 			},
 		}, {
@@ -151,9 +151,9 @@ func TestTrackerThreads(t *testing.T) {
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{}, msi{},
 				[]ThreadUpdate{
-					{"t1", Delta{1, 1, 1, 1, 1, 1, 0, 0}},
-					{"t2", Delta{1, 1, 1, 1, 1, 1, 0, 0}},
-					{"t2", Delta{}},
+					{"t1", 0, Delta{1, 1, 1, 1, 1, 1, 0, 0}},
+					{"t2", 0, Delta{1, 1, 1, 1, 1, 1, 0, 0}},
+					{"t2", 0, Delta{}},
 				},
 			},
 		}, {
@@ -163,13 +163,13 @@ func TestTrackerThreads(t *testing.T) {
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{}, msi{},
 				[]ThreadUpdate{
-					{"t1", Delta{}},
-					{"t2", Delta{0, 1, 2, 3, 4, 5, 0, 0}},
+					{"t1", 0, Delta{}},
+					{"t2", 0, Delta{0, 1, 2, 3, 4, 5, 0, 0}},
 				},
 			},
 		},
 	}
-	tr := NewTracker(newNamer(n), false, true, false, false)
+	tr := NewTracker(newNamer(n), false, true, false, false, false)
 
 	opts := cmpopts.SortSlices(lessThreadUpdate)
 	for i, tc := range tests {

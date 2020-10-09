@@ -1,6 +1,7 @@
 package proc
 
 import (
+	"fmt"
 	"time"
 
 	seq "github.com/ncabatoff/go-seq/seq"
@@ -25,6 +26,7 @@ type (
 	// Threads collects metrics for threads in a group sharing a thread name.
 	Threads struct {
 		Name       string
+		Tid		   int
 		NumThreads int
 		Counts
 	}
@@ -49,11 +51,11 @@ type (
 func lessThreads(x, y Threads) bool { return seq.Compare(x, y) < 0 }
 
 // NewGrouper creates a grouper.
-func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, alwaysRecheck, debug bool) *Grouper {
+func NewGrouper(namer common.MatchNamer, trackChildren, trackThreads, trackThreadIds, alwaysRecheck, debug bool) *Grouper {
 	g := Grouper{
 		groupAccum:  make(map[string]Counts),
 		threadAccum: make(map[string]map[string]Threads),
-		tracker:     NewTracker(namer, trackChildren, trackThreads, alwaysRecheck, debug),
+		tracker:     NewTracker(namer, trackChildren, trackThreads, trackThreadIds, alwaysRecheck, debug),
 		debug:       debug,
 	}
 	return &g
@@ -151,23 +153,35 @@ func (g *Grouper) threads(gname string, tracked []ThreadUpdate) []Threads {
 	ret := make([]Threads, 0, len(tracked))
 	threads := make(map[string]Threads)
 
-	// First aggregate the thread metrics by thread name.
+	// First aggregate the thread metrics by thread name and possibly thread id also.
 	for _, nc := range tracked {
-		curthr := threads[nc.ThreadName]
+		key := ""
+		if g.tracker.trackThreadIds {
+			key = fmt.Sprint(nc.ThreadName, "-", nc.Tid)
+		} else {
+			key = nc.ThreadName
+		}
+
+		curthr := threads[key]
 		curthr.NumThreads++
 		curthr.Counts.Add(nc.Latest)
 		curthr.Name = nc.ThreadName
-		threads[nc.ThreadName] = curthr
+
+		if curthr.Tid == 0 {
+			curthr.Tid = nc.Tid
+		}
+
+		threads[key] = curthr
 	}
 
 	// Add any accumulated counts to what was just observed,
 	// and update the accumulators.
 	if history := g.threadAccum[gname]; history != nil {
-		for tname := range threads {
-			if oldcounts, ok := history[tname]; ok {
-				counts := threads[tname]
+		for tkey := range threads {
+			if oldcounts, ok := history[tkey]; ok {
+				counts := threads[tkey]
 				counts.Add(Delta(oldcounts.Counts))
-				threads[tname] = counts
+				threads[tkey] = counts
 			}
 		}
 	}

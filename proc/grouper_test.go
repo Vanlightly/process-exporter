@@ -73,7 +73,7 @@ func TestGrouperBasic(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1, n2), false, false, false, false)
+	gr := NewGrouper(newNamer(n1, n2), false, false, false,false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -128,7 +128,7 @@ func TestGrouperProcJoin(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -171,7 +171,7 @@ func TestGrouperNonDecreasing(t *testing.T) {
 		},
 	}
 
-	gr := NewGrouper(newNamer(n1), false, false, false, false)
+	gr := NewGrouper(newNamer(n1), false, false, false, false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.procs...))
 		if diff := cmp.Diff(got, tc.want); diff != "" {
@@ -194,8 +194,8 @@ func TestGrouperThreads(t *testing.T) {
 			}),
 			GroupByName{
 				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 2, []Threads{
-					Threads{"t1", 1, Counts{}},
-					Threads{"t2", 1, Counts{}},
+					Threads{"t1", p, 1, Counts{}},
+					Threads{"t2", p + 1, 1, Counts{}},
 				}},
 			},
 		}, {
@@ -206,8 +206,8 @@ func TestGrouperThreads(t *testing.T) {
 			}),
 			GroupByName{
 				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 3, []Threads{
-					Threads{"t1", 1, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
-					Threads{"t2", 2, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+					Threads{"t1", p, 1, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+					Threads{"t2", p + 1, 2, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
 				}},
 			},
 		}, {
@@ -217,14 +217,69 @@ func TestGrouperThreads(t *testing.T) {
 			}),
 			GroupByName{
 				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 2, []Threads{
-					Threads{"t2", 2, Counts{4, 5, 6, 7, 8, 9, 0, 0}},
+					Threads{"t2", p+1, 2, Counts{4, 5, 6, 7, 8, 9, 0, 0}},
 				}},
 			},
 		},
 	}
 
 	opts := cmpopts.SortSlices(lessThreads)
-	gr := NewGrouper(newNamer(n), false, true, false, false)
+	gr := NewGrouper(newNamer(n), false, true, false, false, false)
+	for i, tc := range tests {
+		got := rungroup(t, gr, procInfoIter(tc.proc))
+		if diff := cmp.Diff(got, tc.want, opts); diff != "" {
+			t.Errorf("%d: curgroups differs: (-got +want)\n%s", i, diff)
+		}
+	}
+}
+
+func TestGrouperThreadIds(t *testing.T) {
+	p, n, tm := 1, "g1", time.Unix(0, 0).UTC()
+
+	tests := []struct {
+		proc IDInfo
+		want GroupByName
+	}{
+		{
+			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
+				{ThreadID(ID{p, 0}), "t1", Counts{1, 2, 3, 4, 5, 6, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}, "", States{}},
+			}),
+			GroupByName{
+				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 2, []Threads{
+					Threads{"t1", p, 1, Counts{}},
+					Threads{"t2", p + 1, 1, Counts{}},
+				}},
+			},
+		}, {
+			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
+				{ThreadID(ID{p, 0}), "t1", Counts{2, 3, 4, 5, 6, 7, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{2, 2, 2, 2, 2, 2, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{1, 1, 1, 1, 1, 1, 0, 0}, "", States{}},
+			}),
+			GroupByName{
+				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 3, []Threads{
+					Threads{"t1", p, 1, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+					Threads{"t2", p + 1, 1, Counts{1, 1, 1, 1, 1, 1, 0, 0}},
+					Threads{"t2", p + 2, 1, Counts{}},
+				}},
+			},
+		}, {
+			piinfot(p, n, Counts{}, Memory{}, Filedesc{1, 1}, []Thread{
+				{ThreadID(ID{p + 1, 0}), "t2", Counts{4, 4, 4, 4, 4, 4, 0, 0}, "", States{}},
+				{ThreadID(ID{p + 2, 0}), "t2", Counts{2, 3, 4, 5, 6, 7, 0, 0}, "", States{}},
+			}),
+			GroupByName{
+				"g1": Group{Counts{}, States{}, msi{}, 1, Memory{}, tm, 1, 1, 2, []Threads{
+					Threads{"t2", p+1, 1, Counts{3, 3, 3, 3, 3, 3, 0, 0}},
+					Threads{"t2", p+2, 1, Counts{1, 2, 3, 4, 5, 6, 0, 0}},
+				}},
+			},
+		},
+	}
+
+	opts := cmpopts.SortSlices(lessThreads)
+	gr := NewGrouper(newNamer(n), false, true, true, false, false)
 	for i, tc := range tests {
 		got := rungroup(t, gr, procInfoIter(tc.proc))
 		if diff := cmp.Diff(got, tc.want, opts); diff != "" {

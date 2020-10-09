@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -176,37 +177,37 @@ var (
 	threadCountDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_count",
 		"Number of threads in this group with same threadname",
-		[]string{"groupname", "threadname"},
+		[]string{"groupname", "threadname", "threadid"},
 		nil)
 
 	threadCpuSecsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_cpu_seconds_total",
 		"Cpu user/system usage in seconds",
-		[]string{"groupname", "threadname", "mode"},
+		[]string{"groupname", "threadname", "threadid", "mode"},
 		nil)
 
 	threadIoBytesDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_io_bytes_total",
 		"number of bytes read/written by these threads",
-		[]string{"groupname", "threadname", "iomode"},
+		[]string{"groupname", "threadname", "threadid", "iomode"},
 		nil)
 
 	threadMajorPageFaultsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_major_page_faults_total",
 		"Major page faults for these threads",
-		[]string{"groupname", "threadname"},
+		[]string{"groupname", "threadname", "threadid"},
 		nil)
 
 	threadMinorPageFaultsDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_minor_page_faults_total",
 		"Minor page faults for these threads",
-		[]string{"groupname", "threadname"},
+		[]string{"groupname", "threadname", "threadid"},
 		nil)
 
 	threadContextSwitchesDesc = prometheus.NewDesc(
 		"namedprocess_namegroup_thread_context_switches_total",
 		"Context switches for these threads",
-		[]string{"groupname", "threadname", "ctxswitchtype"},
+		[]string{"groupname", "threadname", "threadid", "ctxswitchtype"},
 		nil)
 )
 
@@ -293,6 +294,8 @@ func main() {
 			"if a proc is tracked, track with it any children that aren't part of their own group")
 		threads = flag.Bool("threads", true,
 			"report on per-threadname metrics as well")
+		threadIds = flag.Bool("threadids", false,
+			"report on per-thread name and id metrics as well")
 		smaps = flag.Bool("gather-smaps", true,
 			"gather metrics from smaps file, which contains proportional resident memory size")
 		man = flag.Bool("man", false,
@@ -362,6 +365,7 @@ func main() {
 			ProcFSPath:  *procfsPath,
 			Children:    *children,
 			Threads:     *threads,
+			ThreadIds:   *threadIds,
 			GatherSMaps: *smaps,
 			Namer:       matchnamer,
 			Recheck:     *recheck,
@@ -411,6 +415,7 @@ type (
 		ProcFSPath  string
 		Children    bool
 		Threads     bool
+		ThreadIds   bool
 		GatherSMaps bool
 		Namer       common.MatchNamer
 		Recheck     bool
@@ -421,6 +426,7 @@ type (
 		scrapeChan chan scrapeRequest
 		*proc.Grouper
 		threads              bool
+		threadIds            bool
 		smaps                bool
 		source               proc.Source
 		scrapeErrors         int
@@ -439,9 +445,10 @@ func NewProcessCollector(options ProcessCollectorOption) (*NamedProcessCollector
 	fs.GatherSMaps = options.GatherSMaps
 	p := &NamedProcessCollector{
 		scrapeChan: make(chan scrapeRequest),
-		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.Recheck, options.Debug),
+		Grouper:    proc.NewGrouper(options.Namer, options.Children, options.Threads, options.ThreadIds, options.Recheck, options.Debug),
 		source:     fs,
 		threads:    options.Threads,
+		threadIds:  options.ThreadIds,
 		smaps:      options.GatherSMaps,
 		debug:      options.Debug,
 	}
@@ -570,31 +577,31 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				for _, thr := range gcounts.Threads {
 					ch <- prometheus.MustNewConstMetric(threadCountDesc,
 						prometheus.GaugeValue, float64(thr.NumThreads),
-						gname, thr.Name)
+						gname, thr.Name, strconv.Itoa(thr.Tid))
 					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
 						prometheus.CounterValue, float64(thr.CPUUserTime),
-						gname, thr.Name, "user")
+						gname, thr.Name, strconv.Itoa(thr.Tid), "user")
 					ch <- prometheus.MustNewConstMetric(threadCpuSecsDesc,
 						prometheus.CounterValue, float64(thr.CPUSystemTime),
-						gname, thr.Name, "system")
+						gname, thr.Name, strconv.Itoa(thr.Tid), "system")
 					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
 						prometheus.CounterValue, float64(thr.ReadBytes),
-						gname, thr.Name, "read")
+						gname, thr.Name, strconv.Itoa(thr.Tid), "read")
 					ch <- prometheus.MustNewConstMetric(threadIoBytesDesc,
 						prometheus.CounterValue, float64(thr.WriteBytes),
-						gname, thr.Name, "write")
+						gname, thr.Name, strconv.Itoa(thr.Tid), "write")
 					ch <- prometheus.MustNewConstMetric(threadMajorPageFaultsDesc,
 						prometheus.CounterValue, float64(thr.MajorPageFaults),
-						gname, thr.Name)
+						gname, thr.Name, strconv.Itoa(thr.Tid))
 					ch <- prometheus.MustNewConstMetric(threadMinorPageFaultsDesc,
 						prometheus.CounterValue, float64(thr.MinorPageFaults),
-						gname, thr.Name)
+						gname, thr.Name, strconv.Itoa(thr.Tid))
 					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
 						prometheus.CounterValue, float64(thr.CtxSwitchVoluntary),
-						gname, thr.Name, "voluntary")
+						gname, thr.Name, strconv.Itoa(thr.Tid), "voluntary")
 					ch <- prometheus.MustNewConstMetric(threadContextSwitchesDesc,
 						prometheus.CounterValue, float64(thr.CtxSwitchNonvoluntary),
-						gname, thr.Name, "nonvoluntary")
+						gname, thr.Name, strconv.Itoa(thr.Tid), "nonvoluntary")
 				}
 			}
 		}
