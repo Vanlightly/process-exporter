@@ -139,8 +139,8 @@ func TestTrackerThreads(t *testing.T) {
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{}, msi{},
 				[]ThreadUpdate{
-					{"t1", 0, Delta{}},
-					{"t2", 0, Delta{}},
+					{"t1", p, Delta{}},
+					{"t2", p + 1, Delta{}},
 				},
 			},
 		}, {
@@ -151,9 +151,9 @@ func TestTrackerThreads(t *testing.T) {
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 3, States{}, msi{},
 				[]ThreadUpdate{
-					{"t1", 0, Delta{1, 1, 1, 1, 1, 1, 0, 0}},
-					{"t2", 0, Delta{1, 1, 1, 1, 1, 1, 0, 0}},
-					{"t2", 0, Delta{}},
+					{"t1", p, Delta{1, 1, 1, 1, 1, 1, 0, 0}},
+					{"t2", p + 1, Delta{1, 1, 1, 1, 1, 1, 0, 0}},
+					{"t2", p + 2, Delta{}},
 				},
 			},
 		}, {
@@ -163,8 +163,8 @@ func TestTrackerThreads(t *testing.T) {
 			}),
 			Update{n, Delta{}, Memory{}, Filedesc{1, 1}, tm, 2, States{}, msi{},
 				[]ThreadUpdate{
-					{"t1", 0, Delta{}},
-					{"t2", 0, Delta{0, 1, 2, 3, 4, 5, 0, 0}},
+					{"t1", p, Delta{}},
+					{"t2", p + 2, Delta{0, 1, 2, 3, 4, 5, 0, 0}},
 				},
 			},
 		},
